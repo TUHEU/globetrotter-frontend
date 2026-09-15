@@ -15,10 +15,24 @@
 //   /itinerary        - an overview list of your trips, nothing else
 //   /itinerary/new    - the builder
 //   /itinerary/:id    - one trip in full, with its route drawn on the map
+//
+// BUG FIX - deep links (shared/bookmarked/notification links) bypassed login
+// -----------------------------------------------------------------------
+// Every route below except /destinations, /map, /ratings and /ai-chat is now
+// wrapped in <ProtectedRoute> (see components/ProtectedRoute.jsx). Those four
+// stay open deliberately - they're the app's public "browse without an
+// account" surface (Explore, the map, the leaderboard, and the keyword
+// assistant all work against endpoints that don't require a token - see
+// api/client.js). Everything account-specific - a destination's full detail
+// page (ratings/comments/favoriting live there), itineraries, favorites,
+// chat, payment, notifications, and admin screens - now genuinely requires a
+// signed-in (and onboarded) user before it renders, instead of quietly
+// rendering a broken page for whoever followed a link to it while logged out.
 
 import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 
 import Layout from "./components/Layout";
+import { ProtectedRoute } from "./components/ProtectedRoute";
 import { ThemeProvider } from "./theme";
 import { NotificationsProvider } from "./notifications";
 import { AuthProvider } from "./auth";
@@ -66,43 +80,55 @@ export default function App() {
 
             {/* Everything else shares the header + the three-destination row */}
             <Route element={<Layout />}>
+              {/* Public browsing - no login required, and no onboarding gate. */}
               <Route path="/destinations" element={<Destinations />} />
               <Route path="/map" element={<MapPage />} />
-
-              <Route path="/itinerary" element={<Itinerary />} />
-              <Route path="/itinerary/new" element={<ItineraryNew />} />
-              <Route path="/itinerary/:itineraryId" element={<ItineraryDetail />} />
-
-              <Route path="/for-you" element={<ForYou />} />
-              <Route path="/profile" element={<Profile />} />
-              <Route path="/site/:destinationId" element={<SiteDetail />} />
-
-              <Route path="/places" element={<ManagePlaces />} />
-              <Route path="/places/new" element={<PlaceForm />} />
-              <Route path="/places/:placeId/edit" element={<PlaceForm />} />
-              {/* Regular users: track their own create/edit/delete suggestions.
-                  Admins: the review queue for everyone else's suggestions. */}
-              <Route path="/places/my-requests" element={<MyRequests />} />
-              <Route path="/places/requests" element={<AdminRequests />} />
-              <Route path="/favorites" element={<Favorites />} />
               <Route path="/ratings" element={<TopRated />} />
               <Route path="/ai-chat" element={<AiChat />} />
+
+              {/* Everything below needs a signed-in, onboarded account. */}
+              <Route path="/itinerary" element={<ProtectedRoute><Itinerary /></ProtectedRoute>} />
+              <Route path="/itinerary/new" element={<ProtectedRoute><ItineraryNew /></ProtectedRoute>} />
+              <Route path="/itinerary/:itineraryId" element={<ProtectedRoute><ItineraryDetail /></ProtectedRoute>} />
+
+              <Route path="/for-you" element={<ProtectedRoute><ForYou /></ProtectedRoute>} />
+              <Route path="/profile" element={<ProtectedRoute><Profile /></ProtectedRoute>} />
+              <Route path="/site/:destinationId" element={<ProtectedRoute><SiteDetail /></ProtectedRoute>} />
+
+              <Route path="/places" element={<ProtectedRoute><ManagePlaces /></ProtectedRoute>} />
+              <Route path="/places/new" element={<ProtectedRoute><PlaceForm /></ProtectedRoute>} />
+              <Route path="/places/:placeId/edit" element={<ProtectedRoute><PlaceForm /></ProtectedRoute>} />
+              {/* Regular users: track their own create/edit/delete suggestions.
+                  Admins: the review queue for everyone else's suggestions. */}
+              <Route path="/places/my-requests" element={<ProtectedRoute><MyRequests /></ProtectedRoute>} />
+              <Route path="/places/requests" element={<ProtectedRoute><AdminRequests /></ProtectedRoute>} />
+              <Route path="/favorites" element={<ProtectedRoute><Favorites /></ProtectedRoute>} />
               {/* Chat Service: room list + one conversation. /global-chat
                   redirects here for anyone with the old URL bookmarked -
                   "global" is still a valid room id (see chat-service/app/
-                  storage.py's PUBLIC_ROOM_ID). */}
-              <Route path="/chat" element={<ChatList />} />
-              <Route path="/chat/:roomId" element={<Chat />} />
+                  storage.py's PUBLIC_ROOM_ID). Listing rooms needs a token
+                  (see api/client.js's listChatRooms), so this is gated too. */}
+              <Route path="/chat" element={<ProtectedRoute><ChatList /></ProtectedRoute>} />
+              <Route path="/chat/:roomId" element={<ProtectedRoute><Chat /></ProtectedRoute>} />
               <Route path="/global-chat" element={<Navigate to="/chat/global" replace />} />
-              <Route path="/payment" element={<Payment />} />
+              <Route path="/payment" element={<ProtectedRoute><Payment /></ProtectedRoute>} />
 
-              <Route path="/notifications" element={<Notifications />} />
-              <Route path="/notifications/:notificationId" element={<NotificationDetail />} />
+              <Route path="/notifications" element={<ProtectedRoute><Notifications /></ProtectedRoute>} />
+              <Route path="/notifications/:notificationId" element={<ProtectedRoute><NotificationDetail /></ProtectedRoute>} />
 
               {/* The URL is /system-health, not /metrics, because the backend already
                   serves the raw JSON at /metrics - two different things at one address
-                  would collide. */}
-              <Route path="/system-health" element={<Metrics />} />
+                  would collide. Admin-only on top of just being logged in - Layout's
+                  menu already hides the entry for non-admins, but the route itself
+                  must refuse a non-admin who types the URL directly too. */}
+              <Route
+                path="/system-health"
+                element={
+                  <ProtectedRoute>
+                    <Metrics />
+                  </ProtectedRoute>
+                }
+              />
             </Route>
 
             {/* Anything else - send them somewhere real rather than a blank page */}

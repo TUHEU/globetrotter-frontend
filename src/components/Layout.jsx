@@ -30,8 +30,7 @@ import {
 } from "lucide-react";
 import { useTheme } from "../theme";
 import { useNotifications } from "../notifications";
-import { authStorage } from "../api/client";
-import { useAuth } from "../auth";
+import { useAuth, useLogout } from "../auth";
 
 // The three main destinations. These are the ones that get the single row.
 const MAIN_TABS = [
@@ -86,6 +85,7 @@ export default function Layout() {
   const { dark, setDark, theme } = useTheme();
   const { unreadCount } = useNotifications();
   const { isAdmin } = useAuth();
+  const logout = useLogout();
   const navigate = useNavigate();
   const location = useLocation();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -105,7 +105,7 @@ export default function Layout() {
   }, [menuOpen]);
 
   const handleLogout = () => {
-    authStorage.clearToken();
+    logout();
     navigate("/login");
   };
 

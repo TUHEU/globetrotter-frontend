@@ -59,6 +59,26 @@ function wsBaseUrl() {
 // attaches the JWT (if we have one) and throws a readable error if
 // the backend responds with a non-2xx status - so screens can just
 // try/catch instead of manually checking response.ok everywhere.
+// BUG FIX - "must log out and log back in for the app to work again"
+// ---------------------------------------------------------------------
+// Every failed request used to throw a plain Error whose only clue about
+// what went wrong was a human-readable string (e.g. "Not authenticated",
+// or a network error's own message). auth.jsx needed to tell "the token
+// is genuinely invalid" (401 - clear it) apart from "the network hiccuped
+// / the gateway restarted" (anything else - keep the token, just retry),
+// but it had no reliable way to do that: some 401 responses' `detail`
+// text doesn't even contain "401" anywhere in it. The fix is to attach
+// the real HTTP status (and, for network failures that never got a
+// response at all, a sentinel of 0) onto the thrown Error as `.status`,
+// so callers can branch on a number instead of guessing from prose.
+class ApiError extends Error {
+  constructor(message, status) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+  }
+}
+
 async function request(path, { method = "GET", body, auth = false } = {}) {
   // A FormData body (file uploads) must NOT get a JSON content type - the
   // browser sets "multipart/form-data" with the right boundary itself - and
@@ -70,15 +90,23 @@ async function request(path, { method = "GET", body, auth = false } = {}) {
     if (token) headers["Authorization"] = `Bearer ${token}`;
   }
 
-  const response = await fetch(`${API_BASE_URL}${path}`, {
-    method,
-    headers,
-    body: body ? (isFormData ? body : JSON.stringify(body)) : undefined,
-  });
+  let response;
+  try {
+    response = await fetch(`${API_BASE_URL}${path}`, {
+      method,
+      headers,
+      body: body ? (isFormData ? body : JSON.stringify(body)) : undefined,
+    });
+  } catch (networkError) {
+    // fetch() itself throws (no connection, DNS failure, CORS preflight
+    // rejected, the gateway is down, etc.) - status 0 signals "we never
+    // even got a response", distinct from any real HTTP status code.
+    throw new ApiError(networkError.message || "Network request failed", 0);
+  }
 
   if (!response.ok) {
     const errorBody = await response.json().catch(() => ({}));
-    throw new Error(errorBody.detail || `Request failed (${response.status})`);
+    throw new ApiError(errorBody.detail || `Request failed (${response.status})`, response.status);
   }
 
   // 204 No Content responses have no JSON body to parse

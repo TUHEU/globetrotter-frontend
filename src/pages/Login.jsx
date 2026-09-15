@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useRef } from "react";
-import { useNavigate } from "react-router-dom";
+import { useNavigate, useLocation } from "react-router-dom";
 import { useTheme } from "../theme";
 import { Compass, User, Mail, Lock, Eye, EyeOff, Sun, Moon, ShieldCheck, ShieldAlert, ShieldQuestion, Shield } from "lucide-react";
 import { api, authStorage } from "../api/client";
+import { useAuth } from "../auth";
 
 // -----------------------------------------------------------------------------
 // GOOGLE SIGN-IN
@@ -140,6 +141,19 @@ function Field({
 
 export default function AuthScreen() {
   const navigate = useNavigate();
+  const location = useLocation();
+  // Set by ProtectedRoute when it redirected someone HERE because they
+  // tried to open a page that needs an account (see components/
+  // ProtectedRoute.jsx) - e.g. a shared link straight to a destination.
+  // Falls back to /destinations, the same default as before, for anyone
+  // who just opened /login directly.
+  const redirectTo = location.state?.from || "/destinations";
+  // Tells AuthProvider to fetch /auth/me (and preferences) for the token we
+  // just stored, right now - instead of waiting for AuthProvider's own
+  // mount-time effect to notice. Without this, code elsewhere reading
+  // useAuth() (e.g. ProtectedRoute, on the very next navigate() below)
+  // could momentarily still see the PREVIOUS session's state.
+  const { refresh } = useAuth();
   // Shares the app-wide theme, so the choice made here is still in
   // effect once you're inside the app - see src/theme.jsx.
   const { dark, setDark, theme } = useTheme();
@@ -176,7 +190,14 @@ export default function AuthScreen() {
     try {
       const result = await api.loginWithGoogle(response.credential);
       authStorage.setToken(result.access_token);
-      navigate("/destinations");
+      refresh();
+      // Google sign-in has no separate "register" step, so a brand-new
+      // account and a returning one look identical here. Ask the backend
+      // directly (rather than assuming "new" == "needs onboarding") -
+      // GET /recommendations/preferences 404s only for someone who has
+      // never completed it, existing travellers go straight in.
+      const onboarded = await api.getPreferences().then(() => true).catch(() => false);
+      navigate(onboarded ? redirectTo : "/onboarding");
     } catch (err) {
       setErrorMessage(err.message || "Google sign-in didn't work. Please try again.");
     } finally {
@@ -261,11 +282,25 @@ export default function AuthScreen() {
         : await api.register(name, email, pwValue);
 
       authStorage.setToken(result.access_token);
+      refresh();
 
-      // New users go through onboarding first (pick interests) so
-      // recommendations have something to work with; returning users
-      // go straight into the app.
-      navigate(isLogin ? "/destinations" : "/onboarding");
+      // New registrations always need onboarding (no preferences exist
+      // yet for a brand-new account, so this is really just a shortcut
+      // that skips one avoidable network call).
+      //
+      // For a LOGIN, though, "returning user -> straight into the app"
+      // used to be assumed unconditionally - which was wrong for anyone
+      // who somehow reached the login form without ever finishing
+      // onboarding (e.g. closed the tab mid-onboarding on a previous
+      // visit, or an account created a different way). Ask the backend
+      // instead of assuming: GET preferences 404s only when none were
+      // ever saved.
+      if (!isLogin) {
+        navigate("/onboarding");
+      } else {
+        const onboarded = await api.getPreferences().then(() => true).catch(() => false);
+        navigate(onboarded ? redirectTo : "/onboarding");
+      }
     } catch (err) {
       setErrorMessage(err.message || "Something went wrong. Please try again.");
     } finally {

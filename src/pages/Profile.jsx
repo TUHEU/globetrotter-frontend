@@ -1,9 +1,10 @@
 import React, { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import { Sun, Moon, Camera, Calendar, MapPin, Map, Heart, Compass as CompassIcon, Landmark, Church, Palette, Users, Coffee, TreePine, BookOpen, UtensilsCrossed, Martini, Mic2, PartyPopper, Mountain, Flower2, ShoppingBag, Baby, Gem, Coins, Laptop, Globe, LogOut, Check, Flame, Trophy, Binoculars } from "lucide-react";
-import { api, authStorage } from "../api/client";
+import { api } from "../api/client";
 import { useTheme } from "../theme";
 import { useLanguage } from "../i18n";
+import { useLogout } from "../auth";
 
 const INTERESTS = [
   { id: "landmarks", label: "Historical Landmarks", icon: Landmark, color: "#f97316" },
@@ -36,6 +37,7 @@ const ID_TO_LABEL = Object.fromEntries(INTERESTS.map((i) => [i.id, i.label]));
 
 export default function ProfileScreen() {
   const navigate = useNavigate();
+  const logout = useLogout();
   // Both of these used to be local state, which meant the Theme and Language
   // switches on this screen changed nothing outside it. They now drive the
   // app-wide theme and language, the same ones the header toggle uses.
@@ -62,7 +64,7 @@ export default function ProfileScreen() {
   };
 
   const handleLogout = () => {
-    authStorage.clearToken();
+    logout();
     navigate("/login");
   };
 

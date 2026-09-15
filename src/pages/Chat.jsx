@@ -30,10 +30,42 @@ import { api } from "../api/client";
 import { useAuth } from "../auth";
 import { useTheme } from "../theme";
 
-// Self-hosted Jitsi's own address - configurable per-deployment (see
-// docker-compose.yml and the README) since it's a separate container with
-// its own port, not something the Gateway proxies.
-const JITSI_BASE_URL = import.meta.env.VITE_JITSI_URL || "https://localhost:8443";
+// -----------------------------------------------------------------------
+// BUG FIX - calls silently failed to connect ("WebRTC/video calls broken")
+// -----------------------------------------------------------------------
+// This used to be:
+//   const JITSI_BASE_URL = import.meta.env.VITE_JITSI_URL || "https://localhost:8443";
+//
+// VITE_JITSI_URL is a BUILD-TIME variable. Unless it was explicitly set
+// when the frontend was built for deployment, every visitor's browser -
+// no matter what server they were actually using the app from - fell
+// back to "https://localhost:8443". That is each PERSON'S OWN machine,
+// not the server. So "Start a call" would broadcast the call correctly
+// (chat-service's signalling was never the problem - see chatlogic.py),
+// but every participant's browser then tried to open Jitsi on their own
+// localhost, where nothing is listening - a call that looks like it
+// "started" but that nobody can actually join. This is likely the root
+// of both the "WebRTC calls don't work" and "chat is broken" reports:
+// the messaging worked fine, only the call-joining step was silently
+// pointed at the wrong address for anyone not on the machine that built
+// the frontend.
+//
+// The fix mirrors exactly what api/client.js already does for
+// API_BASE_URL: derive the real address from window.location (the
+// browser's own URL bar) instead of hard-coding "localhost", and only
+// use VITE_JITSI_URL as an explicit override for deployments that need
+// one (e.g. Jitsi on a different host than the app itself). Jitsi's own
+// container is published on its own port (8443 - see docker-compose.yml's
+// JITSI_HTTPS_PORT), not proxied through the Gateway, so the derived URL
+// keeps the current page's hostname but swaps in that port.
+function deriveJitsiBaseUrl() {
+  const configured = import.meta.env.VITE_JITSI_URL;
+  if (configured) return configured;
+  if (typeof window === "undefined") return "https://localhost:8443";
+  return `https://${window.location.hostname}:8443`;
+}
+
+const JITSI_BASE_URL = deriveJitsiBaseUrl();
 
 const RECONNECT_DELAY_MS = 3000;
 
@@ -125,7 +157,7 @@ export default function ChatScreen() {
     };
 
     socket.onerror = () => socket.close();
-  }, [roomId, user]);
+  }, [roomId, user?.id]);
 
   useEffect(() => {
     connect();

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { useTheme } from "../theme";
 import { Sun, Moon, Landmark, Church, Palette, Users, Coffee, TreePine, BookOpen, UtensilsCrossed, Martini, Mic2, PartyPopper, Mountain, Flower2, ShoppingBag, Baby, Gem, Coins, Laptop, ChevronRight, ChevronLeft, Check, Sparkles, Gauge, Wallet, Flame, Trophy, Binoculars, Camera } from "lucide-react";
 import { api } from "../api/client";
+import { useAuth } from "../auth";
 
 const INTERESTS = [
   // --- Culture & heritage ---
@@ -56,6 +57,10 @@ const BUDGET_ID_TO_SYMBOL = { free: "₣", mid: "₣₣", premium: "₣₣₣" }
 
 export default function OnboardingScreen() {
   const navigate = useNavigate();
+  // Flips useAuth()'s hasOnboarded to true right away, so ProtectedRoute
+  // (see components/ProtectedRoute.jsx) stops redirecting back here the
+  // instant preferences are saved, without needing a page reload.
+  const { refresh } = useAuth();
   // Shares the app-wide theme, so the choice made here is still in
   // effect once you're inside the app - see src/theme.jsx.
   const { dark, setDark, theme } = useTheme();

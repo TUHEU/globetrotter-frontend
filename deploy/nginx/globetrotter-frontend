@@ -14,7 +14,69 @@ server {
     location = /docs { proxy_pass http://127.0.0.1:8105; }
     location = /openapi.json { proxy_pass http://127.0.0.1:8105; }
 
-    location ~ ^/(auth|preferences|users|destinations|favorites|itineraries|routing|media|assistant|rooms|recommendations)(/|$) {
+    # BUG FIX - "the page breaks on reload" / raw JSON shown for a direct
+    # visit to /destinations or /favorites
+    # -----------------------------------------------------------------
+    # /destinations and /favorites are BOTH real backend API path prefixes
+    # (see itinerary-service's routers) AND real React Router page routes
+    # in this SPA (see src/App.jsx). Proxying every request under these
+    # two prefixes straight to the backend unconditionally - as the next
+    # location block below still correctly does for auth/media/rooms/etc,
+    # none of which are ever a real page URL - meant a genuine full-page
+    # load of /destinations (typed into the address bar, refreshed,
+    # opened from a bookmark or a shared link) got the backend's raw JSON
+    # instead of the app shell (index.html) that boots React Router,
+    # which is the only thing that actually knows how to render that
+    # route client-side.
+    #
+    # THE SIGNAL: Accept, not Sec-Fetch-Dest alone
+    # -----------------------------------------------------------------
+    # A first attempt at this fix used only the Fetch Metadata header
+    # Sec-Fetch-Dest, which browsers set to "document" for a real
+    # top-level navigation and "empty" for a fetch()/XHR call - the
+    # technically "correct" signal per spec. A real-browser test exposed
+    # a real gap: this app's service worker (public/service-worker.js)
+    # intercepts navigations and re-issues them to the network itself,
+    # and Chrome does not reliably reproduce the original Sec-Fetch-Dest:
+    # document on that internal re-fetch - so nginx saw something other
+    # than "document" and proxied straight to the API, reproducing the
+    # exact bug this was meant to fix.
+    #
+    # Accept is a plain, ordinary request header, not a Fetch Metadata
+    # header with the same worker-relaying quirk - it survives being
+    # passed through fetch() unchanged no matter how many hands the
+    # request goes through. A real top-level browser navigation always
+    # sends an Accept value STARTING WITH "text/html" (every major
+    # browser does this); this app's own JS calls (src/api/client.js)
+    # never set an Accept header at all, so the browser's fetch()
+    # default of "*/*" goes out instead - which never contains
+    # "text/html" anywhere in it. Sec-Fetch-Dest is kept alongside it as
+    # a harmless extra check (defence in depth for any client that does
+    # send it correctly), not the only signal any more.
+    location ~ ^/(destinations|favorites)(/|$) {
+        set $is_page_navigation "";
+        if ($http_accept ~* "text/html") {
+            set $is_page_navigation "yes";
+        }
+        if ($http_sec_fetch_dest = "document") {
+            set $is_page_navigation "yes";
+        }
+        if ($is_page_navigation = "yes") {
+            rewrite ^ /index.html last;
+        }
+
+        proxy_pass http://127.0.0.1:8105;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+    }
+
+    # Everything else under these prefixes is never a real page URL (no
+    # React Router route starts with any of these - the SPA's own pages
+    # are /itinerary, /ai-chat, /chat, /for-you, /profile, etc, not these
+    # backend-only path names), so it's always safe to proxy straight
+    # through regardless of how the request was made.
+    location ~ ^/(auth|preferences|users|itineraries|routing|media|assistant|rooms|recommendations)(/|$) {
         proxy_pass http://127.0.0.1:8105;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;

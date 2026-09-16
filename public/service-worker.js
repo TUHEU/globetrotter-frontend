@@ -45,7 +45,14 @@
 ============================================================================= */
 
 // Bump this whenever this file changes, so the browser retires the old cache.
-const CACHE_NAME = "globetrotter-v2";
+// BUG FIX - bumped v2 -> v3 specifically to force every already-installed
+// service worker (from before nginx started distinguishing a real page
+// load from the app's own API calls on /destinations and /favorites - see
+// deploy/nginx/globetrotter-frontend) to go through install/activate again
+// on this file's very next byte-level check, rather than sitting there
+// running old logic until someone manually unregistered it from
+// DevTools > Application > Service Workers.
+const CACHE_NAME = "globetrotter-v3";
 
 // The bare minimum needed to open the app with no network at all.
 const APP_SHELL = ["/", "/index.html", "/favicon.svg", "/icons.svg", "/manifest.webmanifest"];

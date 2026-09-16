@@ -3,6 +3,7 @@ import { Link, useNavigate } from "react-router-dom";
 import { api } from "../api/client";
 import { useTheme } from "../theme";
 import { CATEGORIES } from "../lib/categories";
+import { getMediaFor } from "../lib/media";
 import { Search, Heart, MapPin, Star, Bot, TrendingUp, Compass, X } from "lucide-react";
 
 // Backend fields don't map 1:1 to what this screen was designed to
@@ -18,7 +19,17 @@ function toCardShape(destination) {
     mid: "3 000 – 15 000 FCFA",
     premium: "15 000+ FCFA",
   };
-  const firstPhoto = (destination.media || []).find((m) => m.type === "photo");
+  const uploadedPhoto = (destination.media || []).find((m) => m.type === "photo");
+  // BUG FIX - the seed destinations that DO have real photos (dropped into
+  // src/assets/media/<id>/ - see lib/media.js) were showing the plain
+  // colour-gradient placeholder here anyway, even though clicking through
+  // to their detail page (SiteDetail.jsx) displayed those same photos
+  // correctly. SiteDetail.jsx already called getMediaFor() as a fallback
+  // for exactly this case; this card grid simply never did the same
+  // check, so it only ever showed a photo for a destination someone had
+  // uploaded one to THROUGH THE APP (destination.media from the API) -
+  // never one bundled into the frontend at build time instead.
+  const localPhoto = getMediaFor(destination.id).photos[0];
   return {
     id: destination.id,
     name: destination.name,
@@ -28,9 +39,10 @@ function toCardShape(destination) {
     price: destination.price_range || shortPrice[destination.price_level] || destination.price_level,
     trending: destination.rating >= 4.4,
     desc: destination.description,
-    // Uploaded photo, if the place has one - shown as the card image
-    // instead of the gradient placeholder.
-    photo: firstPhoto ? api.mediaUrl(firstPhoto.url) : null,
+    // Uploaded photo (through the app) takes priority; a bundled one
+    // (dropped into the repo directly) is the fallback; otherwise the
+    // gradient placeholder, same as before.
+    photo: uploadedPhoto ? api.mediaUrl(uploadedPhoto.url) : localPhoto ? localPhoto.url : null,
   };
 }
 

@@ -17,6 +17,7 @@ import { api } from "../api/client";
 import { useTheme } from "../theme";
 import { useAuth } from "../auth";
 import { CATEGORIES } from "../lib/categories";
+import { getMediaFor } from "../lib/media";
 
 const CATEGORY_LABEL = Object.fromEntries(CATEGORIES.map((c) => [c.id, c.label]));
 
@@ -82,7 +83,17 @@ export default function ManagePlacesScreen() {
     }
   };
 
-  const firstPhoto = (place) => (place.media || []).find((m) => m.type === "photo");
+  // BUG FIX - same one as Destinations.jsx's toCardShape(): this only
+  // ever checked place.media (photos uploaded THROUGH the app), so a
+  // seed place with a photo bundled straight into the repo instead (see
+  // lib/media.js) showed the plain pin icon here even though its own
+  // detail page displayed that same photo correctly.
+  const firstPhoto = (place) => {
+    const uploaded = (place.media || []).find((m) => m.type === "photo");
+    if (uploaded) return { url: api.mediaUrl(uploaded.url) };
+    const bundled = getMediaFor(place.id).photos[0];
+    return bundled ? { url: bundled.url } : null;
+  };
   const countByType = (place, type) => (place.media || []).filter((m) => m.type === type).length;
 
   return (
@@ -180,7 +191,7 @@ export default function ManagePlacesScreen() {
                       }}
                     >
                       {photo ? (
-                        <img src={api.mediaUrl(photo.url)} alt={place.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                        <img src={photo.url} alt={place.name} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
                       ) : (
                         <MapPin size={32} color="rgba(255,255,255,0.85)" />
                       )}

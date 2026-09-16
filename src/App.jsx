@@ -59,6 +59,9 @@ import NotificationDetail from "./pages/NotificationDetail";
 // The observability dashboard - see /metrics in the app, and
 // backend/app/metrics.py for where the numbers come from.
 import Metrics from "./pages/Metrics";
+// Admin activity dashboard: total users + recent comments/place-requests/
+// newly-created places (see components/Layout.jsx for the menu entry).
+import AdminActivity from "./pages/AdminActivity";
 // The two new screens for the roles/approval-workflow feature.
 import MyRequests from "./pages/MyRequests";
 import AdminRequests from "./pages/AdminRequests";
@@ -126,6 +129,14 @@ export default function App() {
                 element={
                   <ProtectedRoute>
                     <Metrics />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/admin/activity"
+                element={
+                  <ProtectedRoute>
+                    <AdminActivity />
                   </ProtectedRoute>
                 }
               />

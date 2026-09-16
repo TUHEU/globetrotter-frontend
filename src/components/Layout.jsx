@@ -26,7 +26,7 @@ import { useEffect, useState } from "react";
 import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   Bell, Compass, Heart, Activity, LogOut, Map as MapIcon, MapPin, Menu, MessageCircle,
-  Moon, Route, Sparkles, Sun, User, X, Bot, TrendingUp,
+  Moon, Route, Sparkles, Sun, User, X, Bot, TrendingUp, BarChart3,
 } from "lucide-react";
 import { useTheme } from "../theme";
 import { useNotifications } from "../notifications";
@@ -76,6 +76,9 @@ function buildDrawerExtras(isAdmin) {
     isAdmin
       ? { to: "/places/requests", label: "Review requests", icon: MapPin, hint: "Approve or reject suggested changes" }
       : { to: "/places/my-requests", label: "My requests", icon: MapPin, hint: "Status of places you suggested" },
+    // Admin only - total users + recent activity feed. See routers/users.py's
+    // /stats and routers/destinations.py's /activity in the two services.
+    ...(isAdmin ? [{ to: "/admin/activity", label: "Activity & Users", icon: BarChart3, hint: "Total users and recent activity" }] : []),
     // Admin only - see app/security.py in the Gateway for why.
     ...(isAdmin ? [{ to: "/system-health", label: "System health", icon: Activity, hint: "Live API metrics" }] : []),
   ];

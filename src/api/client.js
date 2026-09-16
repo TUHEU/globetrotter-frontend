@@ -175,6 +175,14 @@ export const api = {
   getMetrics: () => request("/metrics", { auth: true }),
   resetMetrics: () => request("/metrics/reset", { method: "POST", auth: true }),
 
+  // Admin activity dashboard: total users + who signed up recently (User
+  // Service, the only service with a users table), and recent
+  // comments/place-requests/newly-created places (Itinerary Service).
+  getUserStats: (recentLimit) =>
+    request(`/users/stats${recentLimit ? `?recent_limit=${recentLimit}` : ""}`, { auth: true }),
+  getDestinationActivity: (limit) =>
+    request(`/destinations/activity${limit ? `?limit=${limit}` : ""}`, { auth: true }),
+
   // --- Recommendations ---
   savePreferences: (interests, pace, budget) =>
     request("/recommendations/preferences", {

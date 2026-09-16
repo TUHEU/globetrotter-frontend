@@ -4,6 +4,7 @@ import { api } from "../api/client";
 import { useTheme } from "../theme";
 import { CATEGORIES } from "../lib/categories";
 import { getMediaFor } from "../lib/media";
+import { genericPhotoFor } from "../lib/genericPhoto";
 import { Search, Heart, MapPin, Star, Bot, TrendingUp, Compass, X } from "lucide-react";
 
 // Backend fields don't map 1:1 to what this screen was designed to
@@ -39,10 +40,17 @@ function toCardShape(destination) {
     price: destination.price_range || shortPrice[destination.price_level] || destination.price_level,
     trending: destination.rating >= 4.4,
     desc: destination.description,
-    // Uploaded photo (through the app) takes priority; a bundled one
-    // (dropped into the repo directly) is the fallback; otherwise the
-    // gradient placeholder, same as before.
-    photo: uploadedPhoto ? api.mediaUrl(uploadedPhoto.url) : localPhoto ? localPhoto.url : null,
+    // Priority: a photo uploaded through the app > one dropped into the
+    // repo for this specific place (see lib/media.js) > a generic stock
+    // placeholder (see lib/genericPhoto.js) so every card shows SOME
+    // photo instead of the flat colour gradient - never presented as a
+    // real photo of the place, just a nicer-looking placeholder than a
+    // gradient was.
+    photo: uploadedPhoto
+      ? api.mediaUrl(uploadedPhoto.url)
+      : localPhoto
+      ? localPhoto.url
+      : genericPhotoFor(destination.id),
   };
 }
 

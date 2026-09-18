@@ -29,39 +29,36 @@ server {
     # which is the only thing that actually knows how to render that
     # route client-side.
     #
-    # THE SIGNAL: Accept, not Sec-Fetch-Dest alone
+    # THE SIGNAL: Accept, and ONLY Accept
     # -----------------------------------------------------------------
-    # A first attempt at this fix used only the Fetch Metadata header
-    # Sec-Fetch-Dest, which browsers set to "document" for a real
-    # top-level navigation and "empty" for a fetch()/XHR call - the
-    # technically "correct" signal per spec. A real-browser test exposed
-    # a real gap: this app's service worker (public/service-worker.js)
-    # intercepts navigations and re-issues them to the network itself,
-    # and Chrome does not reliably reproduce the original Sec-Fetch-Dest:
-    # document on that internal re-fetch - so nginx saw something other
-    # than "document" and proxied straight to the API, reproducing the
-    # exact bug this was meant to fix.
+    # Two earlier attempts at this fix both used Sec-Fetch-Dest, either
+    # alone or alongside Accept as an extra "just in case" check. Both
+    # failed in real-browser testing - not intermittently, but
+    # consistently, because this app's service worker
+    # (public/service-worker.js) intercepts EVERY same-origin GET,
+    # including the app's own fetch('/destinations') calls, and re-issues
+    # them via its own fetch(request) call. Chrome sets Sec-Fetch-Dest to
+    # "document" on THAT relayed request regardless of what the original
+    # request's destination actually was - so with Sec-Fetch-Dest in the
+    # check (even only as one half of an OR), the app's own API calls
+    # were misidentified as page navigations and got served index.html's
+    # HTML instead of JSON, which is a worse failure than the original
+    # bug: "Couldn't load places: Unexpected token '<' ... is not valid
+    # JSON" on every single page load, not just on refresh.
     #
-    # Accept is a plain, ordinary request header, not a Fetch Metadata
-    # header with the same worker-relaying quirk - it survives being
-    # passed through fetch() unchanged no matter how many hands the
-    # request goes through. A real top-level browser navigation always
-    # sends an Accept value STARTING WITH "text/html" (every major
-    # browser does this); this app's own JS calls (src/api/client.js)
-    # never set an Accept header at all, so the browser's fetch()
-    # default of "*/*" goes out instead - which never contains
-    # "text/html" anywhere in it. Sec-Fetch-Dest is kept alongside it as
-    # a harmless extra check (defence in depth for any client that does
-    # send it correctly), not the only signal any more.
+    # Accept does not have this problem, because it is set once, by the
+    # browser, at the moment the ORIGINAL request is constructed -
+    # before the service worker ever sees it - and is carried through
+    # unchanged by fetch(request) no matter how many hands the request
+    # passes through afterwards. A real top-level browser navigation
+    # always sends an Accept value STARTING WITH "text/html" (every
+    # major browser does this); this app's own JS calls
+    # (src/api/client.js) never set an Accept header at all, so the
+    # browser's fetch() default goes out instead, which never contains
+    # "text/html" anywhere in it. This is now the ONLY signal used here -
+    # do not add Sec-Fetch-Dest back next to it, for the reason above.
     location ~ ^/(destinations|favorites)(/|$) {
-        set $is_page_navigation "";
         if ($http_accept ~* "text/html") {
-            set $is_page_navigation "yes";
-        }
-        if ($http_sec_fetch_dest = "document") {
-            set $is_page_navigation "yes";
-        }
-        if ($is_page_navigation = "yes") {
             rewrite ^ /index.html last;
         }
 

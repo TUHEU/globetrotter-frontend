@@ -45,14 +45,20 @@
 ============================================================================= */
 
 // Bump this whenever this file changes, so the browser retires the old cache.
-// BUG FIX - bumped v2 -> v3 specifically to force every already-installed
-// service worker (from before nginx started distinguishing a real page
-// load from the app's own API calls on /destinations and /favorites - see
-// deploy/nginx/globetrotter-frontend) to go through install/activate again
-// on this file's very next byte-level check, rather than sitting there
-// running old logic until someone manually unregistered it from
-// DevTools > Application > Service Workers.
-const CACHE_NAME = "globetrotter-v3";
+// BUG FIX v4 - an earlier, buggy version of the nginx routing rule (since
+// corrected - see deploy/nginx/globetrotter-frontend) briefly served the
+// app's own HTML shell, WITH a 200 OK status, for what should have been
+// the JSON API call to /destinations. Because that response genuinely
+// had response.ok === true at the time, putInCache() below correctly
+// cached it as if it were good data - poisoning this Cache Storage
+// entry with HTML that a JSON.parse() then chokes on ("Unexpected
+// token '<'"), and no amount of re-cloning the repo, rebuilding, or
+// reloading nginx could clear it, because none of those touch a
+// browser's already-installed service worker's own cache. Bumping
+// CACHE_NAME forces every installed worker through activate() again,
+// which deletes every cache name that isn't this new one - including
+// the poisoned entry.
+const CACHE_NAME = "globetrotter-v4";
 
 // The bare minimum needed to open the app with no network at all.
 const APP_SHELL = ["/", "/index.html", "/favicon.svg", "/icons.svg", "/manifest.webmanifest"];
@@ -121,10 +127,27 @@ self.addEventListener("fetch", (event) => {
     event.respondWith(
       fetch(request)
         .then((response) => {
+          // HARDENING - only cache (and only trust) a response that is
+          // actually ok. This was already true of putInCache() itself
+          // (see below), which is what should have prevented the v3
+          // poisoning incident above - but it didn't, because the bad
+          // response WAS a 200 OK at the time (nginx served HTML with a
+          // success status, not an error one). Checking the content-type
+          // too catches exactly that case: a 200 response for an API
+          // path that isn't JSON is never something this app can use,
+          // regardless of its status code, so it's treated as a failure
+          // (falls through to the offline cache, or - if nothing usable
+          // is cached either - the rejection the app's own .catch()
+          // already surfaces as a clear on-screen error, instead of
+          // silently handing back HTML for React to choke on).
+          const contentType = response.headers.get("content-type") || "";
+          if (!response.ok || !contentType.includes("application/json")) {
+            throw new Error(`Unexpected API response: ${response.status} ${contentType}`);
+          }
           putInCache(request, response);
           return response;
         })
-        .catch(() => caches.match(request)) // offline: last good copy
+        .catch(() => caches.match(request))
     );
     return;
   }

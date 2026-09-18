@@ -84,11 +84,22 @@ export default function DestinationsScreen() {
   };
 
   // Fetch places from the backend once, on first load.
+  // BUG DIAGNOSIS AID - the catch used to be `.catch(() => setLoadError(...))`,
+  // throwing away the actual error entirely. That made "Couldn't load
+  // places" mean literally anything - a network failure, a JSON parse
+  // error, a thrown exception inside toCardShape() while reshaping one
+  // destination, anything - with zero way to tell which from the screen
+  // itself. Logging the real error to the console, and folding its own
+  // message into what's shown, turns "it's broken, no idea why" into an
+  // actual diagnosable error on the very first reload.
   useEffect(() => {
     api
       .getDestinations()
       .then((data) => setDestinations(data.map(toCardShape)))
-      .catch(() => setLoadError("Couldn't load places. Is the backend running?"));
+      .catch((err) => {
+        console.error("Failed to load /destinations:", err);
+        setLoadError(`Couldn't load places: ${err?.message || "unknown error"}`);
+      });
   }, []);
 
   // The category chips used to set state that nothing read, and the search
